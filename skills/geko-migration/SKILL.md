@@ -1,12 +1,11 @@
 ---
-
 name: geko-migration
 description: >
   Migrate an existing iOS project to Geko while preserving the project's current
   structure and behavior. Use this skill when converting an existing Xcode,
   CocoaPods, Swift Package Manager, mixed-dependency, or Tuist-managed project
   to a Geko-managed project.
---------------------------
+---
 
 # Geko Migration
 
