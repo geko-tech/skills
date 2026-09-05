@@ -51,6 +51,10 @@ Generated `.xcodeproj` and `.xcworkspace` files are derived artifacts. Do not
 manually edit them to fix migration problems. Change the Geko project
 description and regenerate instead.
 
+Do not add migration notes, temporary Geko workarounds, or version-specific Geko
+issues to the project's README or other documentation unless the user explicitly
+asks for that documentation.
+
 ## Sources of truth
 
 Use migration sources in this order:
@@ -87,7 +91,40 @@ behavior.
 
 ## Migration workflow
 
-### 1. Discover the source project
+### 1. Ensure Geko is available
+
+Before starting the migration, check whether `geko` is available.
+
+If it is installed, inspect the version:
+
+```bash
+geko version
+```
+
+Use the installed version for the migration unless the repository already
+requires a different Geko version.
+
+If Geko is not installed, follow the current installation guide:
+
+https://geko-tech.github.io/geko/guides/general/setup
+
+Do not invent installation commands or assume a package manager that is not
+documented by Geko.
+
+After selecting the Geko version that will be used for the migration, create or
+update `.geko-version` in the repository root.
+
+The file must contain only the exact Geko version used for the migration, for
+example:
+
+```text
+1.1.0
+```
+
+Do not write `latest` or guess a version. Pin the version reported by the Geko
+installation actually used to generate and validate the migrated project.
+
+### 2. Discover the source project
 
 Before creating or modifying any Geko project description, inspect the repository
 and determine how the project is currently managed.
@@ -125,7 +162,7 @@ Tuist manifests, `Podfile`, package manifests, and other configuration files are
 useful structured inputs, but use the resulting Xcode project or workspace to
 verify current behavior when necessary.
 
-### 2. Plan the migration order
+### 3. Plan the migration order
 
 Inspect the existing targets and choose an incremental migration order.
 
@@ -152,7 +189,7 @@ For small projects, migrating several targets in one step is acceptable. Keep
 the migration units small enough that failures can be attributed to a specific
 change.
 
-### 3. Establish the Geko project structure
+### 4. Establish the Geko project structure
 
 Create the minimum Geko project and workspace structure necessary to represent
 the source project.
@@ -165,7 +202,7 @@ unless required for compatibility.
 Use the current Geko `ProjectDescription` API whenever the required
 representation is unclear.
 
-### 4. Migrate build settings
+### 5. Migrate build settings
 
 Preserve the effective build settings of the existing project.
 
@@ -200,31 +237,8 @@ After extracting settings:
 
 1. Reference the resulting `.xcconfig` from the corresponding Geko configuration.
 2. Preserve the original mapping between build configurations and their settings.
-3. Remove settings from the migrated project representation when they are now
-   provided by the `.xcconfig`.
-4. Verify that no unexpected inline build settings remain.
-
-#### Verify migrated settings
-
-For project-level settings:
-
-```bash
-geko migration check-empty-settings \
-  --xcodeproj-path <path-to-xcodeproj>
-```
-
-For target-level settings:
-
-```bash
-geko migration check-empty-settings \
-  --xcodeproj-path <path-to-xcodeproj> \
-  --target <target-name>
-```
-
-The command fails when build settings remain in the selected project or target.
-
-Use this as a migration check, not as proof that the resulting Geko project is
-behaviorally equivalent.
+3. Avoid duplicating settings in the Geko project description when they are
+   already provided by the `.xcconfig`.
 
 If the source project already uses `.xcconfig` files, preserve its existing
 configuration structure when practical. Do not flatten xcconfig inheritance
@@ -234,7 +248,22 @@ Do not remove or normalize unusual or apparently redundant build settings merely
 as cleanup. Modernization should be a separate change unless required for the
 migration.
 
-### 5. Migrate targets
+#### `check-empty-settings`
+
+`geko migration check-empty-settings` is not part of the default migration
+validation workflow.
+
+Use it only when the migration intentionally includes removing inline build
+settings from the source Xcode project and you need to verify that cleanup.
+
+Do not run `check-empty-settings` against a Geko-generated `.xcodeproj`.
+Generated projects may legitimately contain structural or generated build
+settings.
+
+A successful `check-empty-settings` result is not proof that the Geko project is
+behaviorally equivalent to the source project.
+
+### 6. Migrate targets
 
 Represent each target using the current Geko `ProjectDescription` API and
 preserve the migration invariants.
@@ -261,7 +290,7 @@ original project provided that relationship.
 Preserve existing schemes using the current Geko API, including relevant build,
 run, test, and archive behavior.
 
-### 6. Migrate external dependencies
+### 7. Migrate external dependencies
 
 Preserve the existing dependency-management strategy.
 
@@ -276,6 +305,11 @@ https://geko-tech.github.io/geko/guides/features/dependencies/spm/
 
 Do not assume that native Xcode SPM integration maps directly to Geko's
 project-generation model.
+
+Geko declares external SPM dependencies through `Geko/Package.swift` and
+integrates selected products through Geko target dependencies. Consult the
+current documentation rather than reproducing native Xcode SPM integration
+directly.
 
 When a concrete example is useful, inspect:
 
@@ -320,7 +354,7 @@ A relevant fixture is:
 
 https://github.com/geko-tech/geko/tree/main/fixtures/app_with_spm_and_cocoapods
 
-### 7. Migrate from Tuist
+### 8. Migrate from Tuist
 
 Treat Tuist as a structured source format, not as a compatibility layer.
 
@@ -355,7 +389,22 @@ When a mapping is unclear, use the normal Geko sources of truth:
 Validate the generated Geko project against the original Tuist-generated project
 rather than assuming that compiling manifests imply equivalent behavior.
 
-### 8. Generate and validate incrementally
+### 9. Ignore generated Xcode artifacts
+
+Once Geko project descriptions are established, treat the generated Xcode project
+and workspace as derived artifacts.
+
+Add the generated `.xcodeproj` and `.xcworkspace` paths to `.gitignore` when they
+are not already ignored.
+
+Do not delete the existing source project or remove tracked files from version
+control solely as part of this migration unless the user explicitly asks for
+that cleanup.
+
+Do not broadly ignore every Xcode project or workspace in the repository when
+only specific generated paths are owned by Geko.
+
+### 10. Generate and validate incrementally
 
 After every meaningful migration unit, generate the project with:
 
@@ -389,8 +438,18 @@ scripts, tests, applications, or extensions.
 Run relevant tests when the migrated unit contains tests or affects behavior
 covered by them.
 
-Do not require unrelated test suites to pass unless they are necessary to
-validate the migrated behavior.
+If validation fails, compare the same behavior against the source project under
+equivalent conditions when practical.
+
+Investigate failures that appear to be introduced by the migration.
+
+If the same failure is reproducible in the source project, treat it as a
+baseline issue and report it rather than spending migration time fixing
+unrelated project behavior.
+
+A limited retry is reasonable for simulator startup problems or apparently
+intermittent tests, but avoid repeated retries once there is sufficient evidence
+that the failure is unrelated to the migration.
 
 When migration behavior is unclear, compare the generated project with the
 source project rather than guessing. Prefer observable project and build
@@ -400,13 +459,15 @@ behavior over textual `.pbxproj` comparison.
 
 Consider the migration complete when:
 
+* `.geko-version` contains the Geko version used for migration;
 * `geko generate --no-open` succeeds;
 * the Geko project descriptions preserve the required project structure and
   behavior;
+* generated Xcode artifacts are appropriately ignored;
 * required schemes and build configurations are present;
 * external dependencies resolve correctly;
 * important migrated targets build successfully when build validation is needed;
-* relevant tests pass when applicable;
+* relevant tests pass, or any remaining failures are confirmed baseline issues;
 * no required source-project behavior was silently dropped.
 
 If some source-project behavior cannot be represented exactly with the current
