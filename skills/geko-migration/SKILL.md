@@ -268,6 +268,29 @@ behaviorally equivalent to the source project.
 Represent each target using the current Geko `ProjectDescription` API and
 preserve the migration invariants.
 
+Preserve target membership, not the source project's Xcode grouping granularity.
+
+Do not mechanically translate every Xcode file-system synchronized group,
+PBXGroup, or folder reference into a separate Geko `buildableFolder`.
+
+Prefer the simplest Geko file representation that preserves the target's actual
+source and resource membership.
+
+Use this preference order when practical:
+
+1. a single higher-level `buildableFolder` when its contents belong to the target
+   and exclusions can express the differences;
+2. concise glob-based `sources` and `resources` definitions when membership is
+   better represented by patterns;
+3. multiple `buildableFolders` only when target-specific membership or exceptions
+   genuinely require separate roots.
+
+Minimize repeated path declarations while preserving behavior.
+
+After deriving membership from the source project, simplify the Geko
+representation rather than preserving the original Xcode folder grouping
+structure.
+
 Pay particular attention to behavior that is easy to change accidentally during
 project generation:
 
@@ -280,8 +303,9 @@ project generation:
 
 Do not include files solely because they exist in the repository.
 
-When replacing explicit Xcode file membership with Geko directory or glob-based
-definitions, verify that the resulting membership is equivalent.
+When replacing explicit Xcode file membership with Geko directory, buildable
+folder, or glob-based definitions, verify that the resulting membership is
+equivalent.
 
 Do not add dependencies or change target types merely to make the generated
 project build. If a dependency appears to be missing, first determine how the
@@ -404,7 +428,29 @@ that cleanup.
 Do not broadly ignore every Xcode project or workspace in the repository when
 only specific generated paths are owned by Geko.
 
-### 10. Generate and validate incrementally
+### 10. Format Geko manifests
+
+Before final validation, format all Swift manifests created or modified during
+the migration.
+
+This includes, when present:
+
+* `Project.swift`;
+* `Workspace.swift`;
+* `Geko/Package.swift`;
+* `Geko/Config.swift`;
+* migration-specific Swift project-description helpers.
+
+Prefer the repository's existing Swift formatter when one is configured.
+
+Otherwise use `swift-format` when it is available.
+
+Do not leave machine-generated manifests with unnecessarily long single-line
+arrays, initializer argument lists, or inconsistent indentation.
+
+Formatting must not change migration behavior.
+
+### 11. Generate and validate incrementally
 
 After every meaningful migration unit, generate the project with:
 
@@ -460,6 +506,7 @@ behavior over textual `.pbxproj` comparison.
 Consider the migration complete when:
 
 * `.geko-version` contains the Geko version used for migration;
+* Geko manifests have been formatted;
 * `geko generate --no-open` succeeds;
 * the Geko project descriptions preserve the required project structure and
   behavior;
