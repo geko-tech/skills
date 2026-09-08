@@ -9,13 +9,10 @@ description: >
 
 # Geko Migration
 
-Migrate an existing iOS project to Geko while preserving its observable project
-structure and build behavior.
+Migrate an existing iOS project to Geko while preserving its observable behavior
+with the smallest practical set of unrelated changes.
 
-The migration should reproduce the existing project using Geko project
-descriptions with the smallest practical set of unrelated changes.
-
-## Migration invariants
+## Principles
 
 Treat the existing project as the source of truth for current behavior.
 
@@ -30,197 +27,124 @@ Preserve, when applicable:
 - Info.plist and entitlements;
 - build phases and scripts.
 
-Do not use migration as an opportunity to refactor or redesign the project.
+Preserve behavior, not Xcode grouping structure or implementation details that
+are specific to the source project format.
 
-Do not rename, merge, split, or change target types unless required for Geko
-compatibility.
+Do not use migration as an opportunity to refactor, redesign, rename, merge, or
+split project structure unless required for Geko compatibility.
 
-Do not change dependency managers as part of migration unless the user explicitly
-asks for that as a separate task.
+Preserve the existing dependency-management strategy unless the user explicitly
+asks to change it.
 
-A project may use:
+Generated `.xcodeproj` and `.xcworkspace` files are derived artifacts. Fix
+migration issues in Geko project descriptions and regenerate instead of editing
+generated Xcode artifacts.
 
-- no external dependency manager;
-- Swift Package Manager;
-- CocoaPods;
-- both Swift Package Manager and CocoaPods.
-
-Treat mixed dependency management as a valid project configuration.
-
-Generated `.xcodeproj` and `.xcworkspace` files are derived artifacts. Do not
-manually edit them to fix migration problems. Change the Geko project
-description and regenerate instead.
-
-Do not add migration notes, temporary Geko workarounds, or version-specific Geko
-issues to the project's README or other documentation unless the user explicitly
-asks for that documentation.
-
-Do not weaken project behavior merely to satisfy Geko validation. If the source
-project uses a target relationship, product type, build phase, Info.plist
-configuration, or other behavior that Geko rejects, first determine what that
-configuration does in the source project. Reproduce the behavior through a
-supported Geko representation when possible. If Geko cannot represent it
-without changing semantics, report it as a Geko limitation instead of silently
-approximating it.
+If valid source-project behavior cannot be represented correctly with the
+current Geko API, report the limitation explicitly. Do not silently change
+behavior merely to make generation or linting succeed.
 
 ## Sources of truth
 
 Use migration sources in this order:
 
-1. The existing Xcode project or workspace for current observable behavior.
-2. The current Geko `ProjectDescription` API for supported project-description
-   APIs.
-3. Current Geko documentation for feature-specific integration.
-4. Geko fixtures for concrete examples when the required representation is
-   unclear.
+1. The existing Xcode project or workspace for observable behavior.
+2. The current Geko `ProjectDescription` API.
+3. Current Geko documentation.
+4. The smallest relevant Geko fixture when the representation is unclear.
 
-The current Geko `ProjectDescription` API is available at:
+Current `ProjectDescription`:
 
 https://github.com/geko-tech/project-description
 
-Do not infer Geko APIs from Tuist APIs or from older versions of Geko.
-
-### Geko fixtures
-
-The Geko repository contains project fixtures covering many supported project
-configurations:
+Geko fixtures:
 
 https://github.com/geko-tech/geko/tree/main/fixtures
 
-When the Geko representation of a project feature is unclear, inspect the
-smallest fixture that demonstrates that feature.
+Do not infer Geko APIs from Tuist APIs or older Geko versions.
 
-Use fixtures selectively. Do not inspect or load the entire fixture collection
-into context preemptively.
+Use fixtures selectively. Do not load the entire fixture collection into context
+unless necessary.
 
-Treat fixtures as implementation examples. Use current Geko documentation and
-the current `ProjectDescription` API as the authoritative sources for supported
-behavior.
-
-## Migration workflow
+## Workflow
 
 ### 1. Ensure Geko is available
 
-Before starting the migration, check whether `geko` is available.
-
-If it is installed, inspect the version:
+Check whether `geko` is installed and inspect the version:
 
 ```bash
 geko version
 ```
 
-Use the installed version for the migration unless the repository already
-requires a different Geko version.
+Use the installed version unless the repository already requires a different
+one.
 
-If Geko is not installed, follow the current installation guide:
+If Geko is not installed, follow the current setup guide:
 
 https://geko-tech.github.io/geko/guides/general/setup
 
-Do not invent installation commands or assume a package manager that is not
-documented by Geko.
+Create or update `.geko-version` in the repository root with the exact version
+used for migration and validation.
 
-After selecting the Geko version that will be used for the migration, create or
-update `.geko-version` in the repository root.
-
-The file must contain only the exact Geko version used for the migration, for
-example:
+For example:
 
 ```text
 1.1.0
 ```
 
-Do not write `latest` or guess a version. Pin the version reported by the Geko
-installation actually used to generate and validate the migrated project.
+Do not write `latest` or guess a version.
 
 ### 2. Discover the source project
 
-Before creating or modifying any Geko project description, inspect the repository
-and determine how the project is currently managed.
+Before creating Geko manifests, determine how the project is currently managed.
 
 Identify:
 
 - the primary `.xcodeproj` and `.xcworkspace`;
 - whether the project is manually maintained in Xcode or generated by Tuist;
-- whether Swift Package Manager is used;
-- whether CocoaPods is used;
+- whether Swift Package Manager, CocoaPods, or both are used;
 - existing `.xcconfig` files;
-- important custom build scripts or project-generation logic.
+- important custom build scripts or generation logic.
 
-Classify the project along two independent dimensions.
+Classify project management and external dependency management independently.
 
-Project management:
-
-- manually maintained Xcode project;
-- Tuist-managed project.
-
-External dependencies:
-
-- none;
-- Swift Package Manager;
-- CocoaPods;
-- mixed Swift Package Manager and CocoaPods.
-
-Do not determine dependency management from the presence of a single file.
-
-For example, a project may contain both a `Podfile` and Xcode-integrated Swift
-packages. A repository-level `Package.swift` may also describe a local package
-without being the complete dependency model of the application project.
-
-Tuist manifests, `Podfile`, package manifests, and other configuration files are
-useful structured inputs, but use the resulting Xcode project or workspace to
-verify current behavior when necessary.
+Do not infer the complete dependency model from the presence of a single file.
+Use the resulting Xcode project or workspace to verify current behavior when
+needed.
 
 ### 3. Plan the migration order
 
 Inspect the existing targets and choose an incremental migration order.
 
-Use Geko's migration helper:
+Use:
 
 ```bash
 geko migration list-targets --xcodeproj-path <path-to-xcodeproj>
 ```
 
-The command lists targets sorted by their number of dependencies.
+Treat the output as a planning aid, not a strict topological migration order.
 
-Use this output as a migration-planning aid, not as a strict migration order.
+Prefer small migration units that can be generated and validated independently.
+Closely coupled targets may be migrated together when separating them would
+temporarily produce an invalid project.
 
-Prefer starting with targets that have fewer internal dependencies when they can
-be reproduced and validated independently.
+### 4. Establish the Geko structure
 
-Treat a target and the project configuration required to represent it as the
-default migration unit.
+Create the minimum Geko project and workspace structure needed to reproduce the
+source project.
 
-A migration unit may contain multiple tightly coupled targets when migrating one
-of them independently would temporarily produce an invalid project.
+Preserve existing organization when it maps naturally to Geko, but do not add
+extra abstraction merely for migration.
 
-For small projects, migrating several targets in one step is acceptable. Keep
-the migration units small enough that failures can be attributed to a specific
-change.
-
-### 4. Establish the Geko project structure
-
-Create the minimum Geko project and workspace structure necessary to represent
-the source project.
-
-Preserve the existing organization when it maps naturally to Geko.
-
-Do not introduce additional abstraction or restructure the project description
-unless required for compatibility.
-
-Use the current Geko `ProjectDescription` API whenever the required
-representation is unclear.
+Use the current `ProjectDescription` API when a representation is unclear.
 
 ### 5. Migrate build settings
 
-Preserve the effective build settings of the existing project.
+Preserve the effective build settings of the source project.
 
-Prefer moving project and target build settings into `.xcconfig` files instead
-of copying large build-setting dictionaries directly into Geko project
-descriptions.
+Prefer `.xcconfig` files over large inline setting dictionaries when practical.
 
-Geko provides migration helpers for this workflow.
-
-#### Extract project settings
+Project settings:
 
 ```bash
 geko migration settings-to-xcconfig \
@@ -228,9 +152,7 @@ geko migration settings-to-xcconfig \
   --xcconfig-path <output-xcconfig>
 ```
 
-When `--target` is omitted, the command extracts project-level build settings.
-
-#### Extract target settings
+Target settings:
 
 ```bash
 geko migration settings-to-xcconfig \
@@ -239,184 +161,93 @@ geko migration settings-to-xcconfig \
   --xcconfig-path <output-xcconfig>
 ```
 
-Extraction does not complete the migration by itself.
+After extraction:
 
-After extracting settings:
+1. reference the resulting `.xcconfig` from the matching Geko configuration;
+2. preserve the original build-configuration mapping;
+3. avoid duplicating settings already provided by `.xcconfig`.
 
-1. Reference the resulting `.xcconfig` from the corresponding Geko configuration.
-2. Preserve the original mapping between build configurations and their settings.
-3. Avoid duplicating settings in the Geko project description when they are
-   already provided by the `.xcconfig`.
+If the source already uses `.xcconfig`, preserve its existing inheritance when
+practical.
 
-If the source project already uses `.xcconfig` files, preserve its existing
-configuration structure when practical. Do not flatten xcconfig inheritance
-into duplicated settings unless required by Geko compatibility.
+Do not normalize or remove unusual settings merely as cleanup.
 
-Do not remove or normalize unusual or apparently redundant build settings merely
-as cleanup. Modernization should be a separate change unless required for the
-migration.
+`geko migration check-empty-settings` is not part of the default validation
+workflow. Use it only when intentionally removing inline settings from the
+source Xcode project.
 
-#### `check-empty-settings`
+### 6. Migrate targets and file membership
 
-`geko migration check-empty-settings` is not part of the default migration
-validation workflow.
+Represent each target with the current Geko `ProjectDescription` API.
 
-Use it only when the migration intentionally includes removing inline build
-settings from the source Xcode project and you need to verify that cleanup.
+Reconstruct actual source and resource target membership from the source project
+before choosing Geko paths.
 
-Do not run `check-empty-settings` against a Geko-generated `.xcodeproj`.
-Generated projects may legitimately contain structural or generated build
-settings.
+Preserve membership, not Xcode grouping granularity.
 
-A successful `check-empty-settings` result is not proof that the Geko project is
-behaviorally equivalent to the source project.
+Prefer the simplest equivalent representation:
 
-### 6. Migrate targets
+1. a higher-level `buildableFolder` when target membership remains correct;
+2. concise `sources` and `resources` globs with exclusions;
+3. multiple folders or explicit paths only when required to preserve membership.
 
-Represent each target using the current Geko `ProjectDescription` API and
-preserve the migration invariants.
+Do not infer target membership only from repository directory structure or from
+compiler errors.
 
-Preserve target membership, not the source project's Xcode grouping granularity.
+Files outside a target's main directory may still belong to it, and files inside
+that directory may belong to another target or be excluded.
 
-Do not mechanically translate every Xcode file-system synchronized group,
-PBXGroup, or folder reference into a separate Geko `buildableFolder`.
-
-Before choosing globs or buildable folders, reconstruct the target's source and
-resource membership from the source Xcode project.
-
-For file-system-synchronized groups, inspect target-specific membership
-exceptions. Do not infer target membership only from repository directory
-structure: files outside a target's primary directory may belong to that target,
-and files inside the directory may be excluded or belong to another target.
-
-Prefer the simplest Geko file representation that preserves the target's actual
-source and resource membership.
-
-Use this preference order when practical:
-
-1. a single higher-level `buildableFolder` when its contents belong to the target
-   and exclusions can express the differences;
-2. concise glob-based `sources` and `resources` definitions when membership is
-   better represented by patterns;
-3. multiple `buildableFolders` only when target-specific membership or exceptions
-   genuinely require separate roots.
-
-Minimize repeated path declarations while preserving behavior.
-
-After deriving membership from the source project, simplify the Geko
-representation rather than preserving the original Xcode folder grouping
-structure.
-
-Pay particular attention to behavior that is easy to change accidentally during
-project generation:
-
-- exact source and resource target membership;
-- path or glob definitions that may include more files than the original target;
-- target dependencies originating from the Xcode project, SPM, CocoaPods, or
-  build scripts;
-- existing schemes instead of relying on generated defaults;
-- custom build phases that affect build output;
-- product names and module names when they differ from target names;
-- target-specific compilation conditions;
-- Info.plist and extension metadata.
-
-Do not include files solely because they exist in the repository.
-
-When replacing explicit Xcode file membership with Geko directory, buildable
-folder, or glob-based definitions, verify that the resulting membership is
-equivalent.
-
-Do not use compiler failures as the primary mechanism for discovering target
-membership. Build failures may reveal missed relationships, but the source
-project should remain the primary source for reconstructing membership.
+Preserve target dependencies, schemes, custom build phases, product names,
+module names, compilation conditions, resources, and other behavior that affects
+the resulting build.
 
 Do not add dependencies or change target types merely to make the generated
-project build. If a dependency appears to be missing, first determine how the
-original project provided that relationship.
+project build. First determine how the source project provides the relationship.
 
-Source-code changes can be valid when migration exposes previously implicit
-module boundaries or imports. For example, a file may need an explicit module or
-framework import once its dependencies are represented correctly. Before changing
-source code, verify that the Geko target membership, dependencies, build settings,
-and module names match the source project. Do not use source changes to hide an
-incorrect project description.
+Source-code changes are allowed when the migrated project correctly reproduces
+the original target boundaries and the change makes an implicit dependency
+explicit, such as adding a required import.
 
-#### App and watch extensions
-
-For application extensions and watch-related extensions, preserve the source
-target's Info.plist behavior and extension metadata.
-
-If the source target uses an explicit Info.plist, represent it as the target's
-`infoPlist` when supported instead of including it as an ordinary resource.
-
-Preserve metadata such as `NSExtension`, extension point identifiers, bundle
-identifiers, product names, and watch embedding relationships. A generated
-minimal Info.plist may be sufficient for compilation but still produce an
-application or extension that cannot be installed or launched.
-
-Do not change an extension product type solely to satisfy Geko linting if the new
-type changes runtime semantics. Treat an unrepresentable relationship as a Geko
-limitation and report it.
-
-Preserve existing schemes using the current Geko API, including relevant build,
-run, test, and archive behavior.
+Do not modify source code to compensate for an incorrect Geko graph, membership,
+build setting, or module name.
 
 ### 7. Migrate external dependencies
 
-Preserve the existing dependency-management strategy.
+Preserve the source project's dependency-management strategy.
 
 #### Swift Package Manager
 
-When Swift Package Manager is present, preserve the package requirements,
-products, and target-to-product relationships used by the source project.
-
-Before implementing the Geko representation, consult the current Geko SPM guide:
+Consult the current Geko SPM guide:
 
 https://geko-tech.github.io/geko/guides/features/dependencies/spm/
 
-Do not assume that native Xcode SPM integration maps directly to Geko's
-project-generation model.
+Preserve package requirements, products, and target-to-product relationships.
 
-Geko declares external SPM dependencies through `Geko/Package.swift` and
-integrates selected products through Geko target dependencies. Consult the
-current documentation rather than reproducing native Xcode SPM integration
-directly.
+Do not assume native Xcode SPM integration maps directly to Geko.
 
-When a concrete example is useful, inspect:
+A relevant fixture is:
 
 https://github.com/geko-tech/geko/tree/main/fixtures/app_with_spm_dependencies
 
-When a package product cannot be generated or mapped, do not compensate by
-guessing internal transitive package targets in the application manifest.
-Confirm whether the failure is in the package graph, the migrated dependency
-declaration, or Geko's SPM integration. If Geko cannot represent a valid SwiftPM
-graph, report that as a Geko limitation.
+If a valid SwiftPM graph cannot be represented by Geko, report that as a Geko
+limitation instead of inventing application-level workarounds.
 
 #### CocoaPods
-
-When CocoaPods is present, use the current Geko CocoaPods integration rather than
-manually recreating CocoaPods-generated project behavior.
 
 Consult:
 
 https://geko-tech.github.io/geko/guides/features/dependencies/cocoapods/
 
-If the source project contains local or development pods, inspect the local
-CocoaPods modules section of that guide.
-
-When migration behavior depends on podspec features, verify that those fields
-are supported by Geko:
+For podspec feature support:
 
 https://geko-tech.github.io/geko/guides/features/dependencies/cocoapods/podspec_supported_keys
 
-Do not silently approximate unsupported podspec behavior with unrelated Geko
-configuration.
+Use Geko's CocoaPods integration instead of manually reproducing
+CocoaPods-generated behavior.
 
-Useful fixtures include:
+Relevant fixtures:
 
 https://github.com/geko-tech/geko/tree/main/fixtures/ios_app_workspace_with_cocoapods
-
-For multiplatform CocoaPods projects:
 
 https://github.com/geko-tech/geko/tree/main/fixtures/ios_app_workspace_with_multiplatform_cocoapods
 
@@ -424,98 +255,68 @@ https://github.com/geko-tech/geko/tree/main/fixtures/ios_app_workspace_with_mult
 
 Do not consolidate mixed dependency management as part of migration.
 
-Migrate both integrations independently and preserve how each target consumes
-dependencies from both systems.
+Migrate both integrations independently.
 
-A relevant fixture is:
+Relevant fixture:
 
 https://github.com/geko-tech/geko/tree/main/fixtures/app_with_spm_and_cocoapods
 
 ### 8. Migrate from Tuist
 
-Treat Tuist as a structured source format, not as a compatibility layer.
+Treat Tuist manifests as structured source input, not as a compatibility layer.
 
-Geko was historically based on Tuist concepts, but modern Geko has diverged and
-does not provide one-to-one Tuist compatibility.
+Geko and Tuist share historical concepts but are not one-to-one compatible.
 
-Do not migrate a Tuist project by mechanically copying manifests or replacing
-imports.
-
-Use Tuist manifests and shared project-description helpers to understand the
-intended project model.
-
-Map concepts, not syntax.
+Do not mechanically copy Tuist manifests or infer Geko initializers from
+similarly named Tuist APIs.
 
 For each relevant Tuist declaration:
 
 1. determine the behavior it produces;
 2. inspect the current Geko `ProjectDescription` API;
-3. reproduce that behavior using the supported Geko representation.
+3. reproduce the behavior using supported Geko concepts.
 
-Do not infer Geko initializers or APIs from similarly named Tuist types.
-
-Preserve the existing manifest and workspace organization when it maps naturally
-to Geko, but do not preserve Tuist-specific abstraction purely for compatibility.
-
-When a mapping is unclear, use the normal Geko sources of truth:
-
-1. current `ProjectDescription`;
-2. relevant Geko documentation;
-3. the smallest matching fixture.
-
-Validate the generated Geko project against the original Tuist-generated project
-rather than assuming that compiling manifests imply equivalent behavior.
+Validate the generated Geko project against the original Tuist-generated
+project rather than assuming similar manifest syntax means equivalent behavior.
 
 ### 9. Ignore generated Xcode artifacts
 
-Once Geko project descriptions are established, treat the generated Xcode project
-and workspace as derived artifacts.
+Treat Geko-generated `.xcodeproj` and `.xcworkspace` outputs as derived
+artifacts.
 
-Add the generated `.xcodeproj` and `.xcworkspace` paths to `.gitignore` when they
-are not already ignored.
+Add only the specific generated paths to `.gitignore` when needed.
 
-Do not delete the existing source project or remove tracked files from version
-control solely as part of this migration unless the user explicitly asks for
-that cleanup.
+Do not broadly ignore every Xcode project or workspace in the repository.
 
-Do not broadly ignore every Xcode project or workspace in the repository when
-only specific generated paths are owned by Geko.
+Do not delete the source project or remove tracked files from version control
+unless the user explicitly asks for cleanup.
 
-If generation uses the same path or name as a tracked source Xcode artifact,
-preserve the source artifact and avoid committing generated PBX changes as source
-migration changes.
+### 10. Validate
 
-### 10. Generate and validate incrementally
+Validation is part of the migration, not a separate optional step.
 
-After every meaningful migration unit, generate the project with:
+#### Generate
+
+After every meaningful migration unit:
 
 ```bash
 geko generate --no-open
 ```
 
-Use `--no-open` during agent-driven migration to avoid opening Xcode after each
-generation step.
+Generation success is the first validation gate only. It proves that Geko can
+generate the project; it does not prove that the project builds or behaves
+correctly.
 
-Successful generation is only the first validation gate. It proves that the
-current Geko project description is valid enough to generate Xcode artifacts; it
-does not prove that the migrated project builds, installs, launches, or preserves
-runtime behavior.
+Do not continue accumulating unrelated migration changes while generation is
+failing.
 
-Do not continue accumulating migration changes while generation is failing.
+#### Build
 
-Fix the Geko project description and regenerate instead of editing generated
-Xcode project files.
+For application projects, a successful build of the primary application is
+required before considering the migration complete.
 
-#### Build validation
-
-Use `xcodebuild` for build validation.
-
-For application projects, a successful build of the primary application is a
-required completion gate, not an optional validation step.
-
-After the project generates successfully, build the primary application using
-the generated Geko workspace or project and an appropriate simulator
-destination. Prefer the project's existing primary scheme when one exists.
+Use the generated Geko workspace or project and the source project's primary
+scheme when available.
 
 For example:
 
@@ -528,87 +329,60 @@ xcodebuild \
   build
 ```
 
-Do not consider an application migration complete after `geko generate`,
-`geko dump`, `xcodebuild -list`, manifest compilation, or dependency resolution
-alone.
+Do not stop after successful manifest compilation, dependency resolution,
+`geko dump`, `xcodebuild -list`, or `geko generate`.
 
-For non-application migration units, prefer building the migrated target or the
-smallest scheme that meaningfully validates the change.
+For non-application migration units, build the smallest meaningful target or
+scheme when build validation is useful.
 
-Build validation is especially important when migration changes affect linking,
-target dependencies, package products, CocoaPods integration, custom build
-scripts, tests, applications, or extensions.
+If a build fails, diagnose the failure against the source project and continue
+the generate/build loop until the required build succeeds or a specific blocker
+is demonstrated.
 
-If a build fails, diagnose the first meaningful failure against the source
-project and continue the generate/build loop until the required build succeeds
-or a specific external/Geko blocker is demonstrated.
+If target membership or module boundaries changed during debugging and
+incremental build state appears stale, perform a clean rebuild before drawing
+conclusions.
 
-A build failure may reveal missing source membership, resources, dependencies,
-module names, compilation conditions, Info.plist metadata, or explicit imports.
-Fix the underlying representation rather than patching generated project files.
+#### Runtime validation
 
-When incremental build state becomes suspicious after changing target membership
-or module boundaries, perform a clean rebuild before drawing conclusions.
+For runnable iOS applications, attempt simulator installation or launch when it
+is practical and materially improves validation.
 
-#### Install and launch validation
+This is especially useful when the project contains embedded products or
+packaging behavior that may pass compilation but fail during installation.
 
-For a runnable iOS application, successful compilation and linking are not the
-strongest available validation. After the primary application builds, attempt to
-install and, when practical, launch it on an iOS Simulator.
+If runtime validation fails, compare the generated application with the source
+project and determine whether the failure is caused by migration behavior or by
+the simulator environment.
 
-Use the repository's existing run scheme or standard Xcode/simulator tooling.
-Do not invent application-specific runtime setup that the source project does
-not require.
+Do not treat CoreSimulator availability, device startup failures, or similar
+infrastructure issues as migration defects.
 
-Installation is particularly important for projects containing app extensions,
-watch apps, widgets, or embedded bundles because malformed Info.plist metadata
-or embedding relationships can pass a normal build and fail only during
-installation.
+Runtime validation is useful but does not require spending unlimited time on
+environmental failures.
 
-If simulator installation or launch fails:
+#### Tests
 
-1. inspect the built application and embedded bundle metadata;
-2. compare the failing target's Info.plist, product type, bundle identifier, and
-   embedding relationship with the source project;
-3. distinguish project/migration failures from simulator infrastructure failures;
-4. continue fixing migration differences when the failure is caused by the
-   generated project.
+Run relevant tests when the migrated unit contains tests or when the migration
+changes behavior covered by them.
 
-Do not classify CoreSimulator service failures, unavailable devices, or similar
-environmental failures as migration defects. A limited retry is reasonable.
+When validation fails, compare the same operation against the source project
+under equivalent conditions when practical.
 
-If the application builds but cannot be installed because Geko cannot represent
-a valid source-project relationship without changing semantics, report the
-migration as blocked by that Geko limitation rather than complete.
+If the source project fails in the same way, treat it as a baseline issue rather
+than fixing unrelated application behavior during migration.
 
-#### Test validation
+Prefer observable build and runtime behavior over textual `.pbxproj`
+comparison.
 
-Run relevant tests when the migrated unit contains tests or affects behavior
-covered by them.
+### 11. Finalize
 
-If validation fails, compare the same behavior against the source project under
-equivalent conditions when practical.
+Before final validation, format modified Swift manifests.
 
-Investigate failures that appear to be introduced by the migration.
+Prefer the repository's existing formatter. Otherwise use `swift-format` when
+available, including `xcrun swift-format` from the active Xcode toolchain.
 
-If the same failure is reproducible in the source project, treat it as a
-baseline issue and report it rather than spending migration time fixing
-unrelated project behavior.
-
-A limited retry is reasonable for simulator startup problems or apparently
-intermittent tests, but avoid repeated retries once there is sufficient evidence
-that the failure is unrelated to the migration.
-
-When migration behavior is unclear, compare the generated project with the
-source project rather than guessing. Prefer observable project and build
-behavior over textual `.pbxproj` comparison.
-
-### 11. Format Geko manifests
-
-Before final validation, format all Swift manifests created or modified during
-the migration.
-
-This includes, when present:
+Format, when present:
 
 - `Project.swift`;
 - `Workspace.swift`;
@@ -616,45 +390,37 @@ This includes, when present:
 - `Geko/Config.swift`;
 - migration-specific Swift project-description helpers.
 
-Prefer the repository's existing Swift formatter when one is configured.
+After formatting, run:
 
-Otherwise use `swift-format` when it is available. If `swift-format` is provided
-through the active Xcode toolchain, `xcrun swift-format` is acceptable.
+```bash
+geko generate --no-open
+```
 
-Do not leave machine-generated manifests with unnecessarily long single-line
-arrays, initializer argument lists, or inconsistent indentation.
+again.
 
-Formatting must not change migration behavior.
-
-After formatting manifests, run `geko generate --no-open` once more. If
-formatting changes files involved in validation, repeat the required validation
-gate when necessary.
+Inspect the final diff and ensure generated Xcode artifacts are not being
+committed as migration source changes.
 
 ## Completion criteria
 
 Consider the migration complete when:
 
-- `.geko-version` contains the Geko version used for migration;
-- Geko manifests have been formatted;
+- `.geko-version` contains the exact Geko version used;
 - `geko generate --no-open` succeeds;
-- the Geko project descriptions preserve the required project structure and
-  behavior;
+- the Geko project preserves the required project structure and behavior;
 - generated Xcode artifacts are appropriately ignored;
-- required schemes and build configurations are present;
-- external dependencies resolve correctly;
+- required schemes, configurations, settings, dependencies, and target
+  memberships are preserved;
 - for an application project, the primary application builds successfully from
   the generated Geko workspace or project;
-- for a runnable iOS application, simulator installation and launch have been
-  validated when practical, or an environmental limitation preventing that
-  validation is reported;
-- app extensions, watch apps, widgets, and other embedded bundles have preserved
-  Info.plist metadata and embedding behavior required for installation;
-- relevant tests pass, or any remaining failures are confirmed baseline issues;
+- relevant tests and runtime validation were performed when appropriate;
+- remaining validation failures are either confirmed baseline issues,
+  environmental limitations, or explicitly identified Geko limitations;
 - no required source-project behavior was silently dropped.
 
-Do not report an application migration as complete solely because Geko
-generation succeeds.
+Do not report an application migration as complete solely because generation
+succeeds.
 
-If some source-project behavior cannot be represented exactly with the current
-Geko API, report the remaining difference explicitly and explain why it is a Geko
-limitation or describe the behavior-preserving workaround.
+If the current Geko API cannot reproduce valid source-project behavior without
+changing semantics, report the limitation clearly instead of silently
+approximating the source project.
