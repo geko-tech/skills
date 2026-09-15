@@ -1,0 +1,19 @@
+name: Validate Agent Skills
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Validate Agent Skills
+        run: gh skill publish --dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -1,0 +1,46 @@
+name: Release Agent Skills
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Repository SemVer tag (for example, 0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-agent-skills
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate release tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [[ ! "$TAG" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Tag must be a stable SemVer tag such as 0.1.0" >&2
+            exit 1
+          fi
+
+      - name: Validate Agent Skills
+        run: gh skill publish --dry-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Publish GitHub Release
+        run: gh skill publish --tag "$TAG"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
